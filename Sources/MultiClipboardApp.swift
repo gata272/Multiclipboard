@@ -11,8 +11,12 @@ struct MultiClipboardApp: App {
                 .environmentObject(clipboardManager)
                 .onChange(of: scenePhase) { newPhase in
                     if newPhase == .active {
+                        clipboardManager.importShortcutInbox()
                         clipboardManager.captureCurrentPasteboard()
                     }
+                }
+                .onOpenURL { url in
+                    clipboardManager.handleIncomingURL(url)
                 }
         }
     }

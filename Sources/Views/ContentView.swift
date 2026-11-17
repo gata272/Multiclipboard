@@ -33,8 +33,8 @@ struct ContentView: View {
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
-                        manager.captureCurrentPasteboard()
-                        manager.showToast("クリップボードを確認しました")
+                        manager.importShortcutInbox()
+                        manager.captureCurrentPasteboard(force: true, showFeedback: true)
                     } label: {
                         Image(systemName: "doc.on.clipboard")
                     }
@@ -102,7 +102,7 @@ struct ContentView: View {
                     Text("クリップ履歴がありません")
                         .font(.headline)
                         .foregroundColor(.secondary)
-                    Text("他のアプリでテキストをコピーして戻ると\n自動的にここへ保存されます")
+                    Text("他のアプリでテキストをコピーして戻るか、\niOSショートカットから保存できます")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)

@@ -1,19 +1,67 @@
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject var manager: ClipboardManager
     @Environment(\.dismiss) private var dismiss
     @State private var showClearConfirm = false
 
+    private let directURLScheme = "multiclip://save"
+    private let liveContainerURLScheme = "livecontainer://open-url?url=multiclip%3A%2F%2Fsave"
+
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Button {
+                        UIPasteboard.general.string = ClipboardManager.shortcutDelimiter
+                        manager.showToast("区切り文字をコピーしました")
+                    } label: {
+                        HStack {
+                            Text("区切り文字をコピー")
+                            Spacer()
+                            Text(ClipboardManager.shortcutDelimiter)
+                                .font(.caption.monospaced())
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    Button {
+                        UIPasteboard.general.string = liveContainerURLScheme
+                        manager.showToast("LiveContainer用URLをコピーしました")
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("LiveContainer起動URLをコピー")
+                            Text(liveContainerURLScheme)
+                                .font(.caption.monospaced())
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    Button {
+                        UIPasteboard.general.string = directURLScheme
+                        manager.showToast("URLスキームをコピーしました")
+                    } label: {
+                        HStack {
+                            Text("URLスキームをコピー")
+                            Spacer()
+                            Text(directURLScheme)
+                                .font(.caption.monospaced())
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("iOSショートカット連携")
+                } footer: {
+                    Text("【おすすめ：画面を切り替えずに裏で保存】\nショートカットアプリで「クリップボードを取得」→「テキストファイルに追加」を選び、保存先に『このiPhone内 > LiveContainer > Data > Application > (本アプリ) > Documents > shortcut_inbox.txt』を指定してください。改行を含む文章もそのまま保存したい場合は、クリップボードの後に上の区切り文字を追加して書き込むと完璧に分割取り込みできます。\n\n【URLスキームで即保存】\n「URLを開く」アクションで上のURLを開くと、起動と同時にクリップボードを保存します。")
+                }
+
                 Section {
                     Toggle("バックグラウンド監視（実験的）", isOn: $manager.isBackgroundMonitorEnabled)
                 } header: {
                     Text("バックグラウンド動作")
                 } footer: {
-                    Text("無音オーディオ再生を利用してバックグラウンドでのクリップボード自動取得を維持します。バッテリー消費がわずかに増える場合があります。iOS 16以降の仕様により、他アプリからの自動読み取り時にシステム許可ダイアログが表示されることがあります。")
+                    Text("無音オーディオ再生を利用してバックグラウンドでのクリップボード自動取得を維持します。")
                 }
 
                 Section {

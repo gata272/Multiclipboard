@@ -23,7 +23,9 @@ final class ClipboardManager: ObservableObject {
         }
     }
 
+    static let shortcutDelimiter = "===MULTICLIP_ITEM==="
     private let storageFileName = "clipboard_history.json"
+    private let inboxFileName = "shortcut_inbox.txt"
     private let bgMonitorKey = "bg_monitor_enabled"
     private let maxCountKey = "max_history_count"
     private var lastCapturedChangeCount: Int = -1
@@ -40,6 +42,8 @@ final class ClipboardManager: ObservableObject {
         }
         self.isBackgroundMonitorEnabled = UserDefaults.standard.bool(forKey: bgMonitorKey)
         loadItems()
+        ensureShortcutInboxFileExists()
+        importShortcutInbox()
         setupNotifications()
         captureCurrentPasteboard()
         if isBackgroundMonitorEnabled {
@@ -87,17 +91,25 @@ final class ClipboardManager: ObservableObject {
         }
     }
 
-    func captureCurrentPasteboard() {
+    func captureCurrentPasteboard(force: Bool = false, showFeedback: Bool = false) {
         let pasteboard = UIPasteboard.general
         let currentCount = pasteboard.changeCount
-        guard currentCount != lastCapturedChangeCount else { return }
+        if !force {
+            guard currentCount != lastCapturedChangeCount else { return }
+        }
         lastCapturedChangeCount = currentCount
 
-        guard let str = pasteboard.string else { return }
+        guard let str = pasteboard.string else {
+            if showFeedback {
+                showToast("クリップボードにテキストがありません")
+            }
+            return
+        }
         let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, str != lastCapturedString else { return }
+        guard !trimmed.isEmpty else { return }
+        if !force && str == lastCapturedString { return }
 
-        addClip(str, showFeedback: false)
+        addClip(str, showFeedback: showFeedback)
     }
 
     func addClip(_ text: String, showFeedback: Bool = true) {
@@ -174,6 +186,64 @@ final class ClipboardManager: ObservableObject {
         }
     }
 
+    // MARK: - iOS Shortcuts & URL Scheme Integration
+    func handleIncomingURL(_ url: URL) {
+        guard url.scheme?.lowercased() == "multiclip" else { return }
+        let host = url.host?.lowercased() ?? ""
+
+        if host == "save" {
+            captureCurrentPasteboard(force: true, showFeedback: false)
+            showToast("ショートカットから保存しました")
+        } else if host == "add" {
+            if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+               let text = components.queryItems?.first(where: { $0.name == "text" })?.value,
+               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                addClip(text, showFeedback: false)
+                showToast("ショートカットから追加しました")
+            }
+        }
+    }
+
+    var inboxURL: URL {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return docs.appendingPathComponent(inboxFileName)
+    }
+
+    func ensureShortcutInboxFileExists() {
+        if !FileManager.default.fileExists(atPath: inboxURL.path) {
+            try? "".write(to: inboxURL, atomically: true, encoding: .utf8)
+        }
+    }
+
+    func importShortcutInbox() {
+        ensureShortcutInboxFileExists()
+        guard let rawContent = try? String(contentsOf: inboxURL, encoding: .utf8) else { return }
+        let trimmedAll = rawContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAll.isEmpty else { return }
+
+        let chunks: [String]
+        if rawContent.contains(Self.shortcutDelimiter) {
+            chunks = rawContent.components(separatedBy: Self.shortcutDelimiter)
+        } else {
+            chunks = rawContent.components(separatedBy: .newlines)
+        }
+
+        var importedCount = 0
+        for chunk in chunks {
+            let cleaned = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleaned.isEmpty else { continue }
+            addClip(cleaned, showFeedback: false)
+            importedCount += 1
+        }
+
+        // Clear inbox after importing
+        try? "".write(to: inboxURL, atomically: true, encoding: .utf8)
+
+        if importedCount > 0 {
+            showToast("ショートカットから\(importedCount)件取り込みました")
+        }
+    }
+
     // MARK: - Background Keep-Alive (for LiveContainer / Sideloaded Apps)
     private func updateBackgroundMonitoring() {
         if isBackgroundMonitorEnabled {
@@ -207,7 +277,6 @@ final class ClipboardManager: ObservableObject {
             let frameCount = AVAudioFrameCount(44100)
             guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return }
             buffer.frameLength = frameCount
-            // Buffer is zero-initialized (silent)
 
             try engine.start()
             player.scheduleBuffer(buffer, at: nil, options: .loops, completionHandler: nil)
@@ -228,7 +297,7 @@ final class ClipboardManager: ObservableObject {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
-    // MARK: - Persistence (Documents directory works cleanly inside LiveContainer sandbox)
+    // MARK: - Persistence
     private var storageURL: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return docs.appendingPathComponent(storageFileName)
